@@ -4,15 +4,12 @@ export default defineNuxtConfig({
   devtools: { enabled: true },
   modules: ['@nuxtjs/supabase'],
 
-  // supabase: {
-  //   redirectOptions: {
-  //     login: '/login',
-  //     callback: '/confirm',
-  //     exclude: ['/', '/register'],
-  //   }
-  // },
   supabase: {
-    redirect: false,
+    redirectOptions: {
+      login: '/login',
+      callback: '/confirm',
+      exclude: ['/', '/register'],
+    }
   },
 
   app: {
