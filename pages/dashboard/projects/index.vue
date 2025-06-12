@@ -1,10 +1,14 @@
 <template>
   <div>
     <div class="flex justify-between items-center mb-6">
-      <h1 class="text-2xl font-bold text-gray-800">All Projects</h1>
+      <div>
+        <h1 class="text-2xl font-bold text-gray-800">Projects</h1>
+        <p v-if="currentTeam" class="text-sm text-gray-600">{{ currentTeam.name }}</p>
+      </div>
       <button 
         @click="showCreateModal = true"
-        class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
+        :disabled="!currentTeam"
+        class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50"
       >
         Create Project
       </button>
@@ -33,10 +37,11 @@
         <span class="material-icons text-6xl">folder_open</span>
       </div>
       <h3 class="text-lg font-medium text-gray-900 mb-2">No projects yet</h3>
-      <p class="text-gray-600 mb-4">Get started by creating your first project.</p>
+      <p class="text-gray-600 mb-4">Get started by creating your first project{{ currentTeam ? ` in ${currentTeam.name}` : '' }}.</p>
       <button 
         @click="showCreateModal = true"
-        class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
+        :disabled="!currentTeam"
+        class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50"
       >
         Create Project
       </button>
@@ -93,6 +98,7 @@ definePageMeta({
 
 const supabase = useSupabaseClient()
 const user = useSupabaseUser()
+const { currentTeam } = useTeam()
 
 const projects = ref([])
 const loading = ref(false)
@@ -103,19 +109,20 @@ const newProject = reactive({
 })
 
 const fetchProjects = async () => {
+  if (!currentTeam.value?.id) return
+  
   try {
     const { data, error } = await supabase
       .from('projects')
       .select(`
         *,
-        todos!inner(count)
+        todos(count)
       `)
-      .eq('user_id', user.value.id)
+      .eq('team_id', currentTeam.value.id)
       .order('created_at', { ascending: false })
 
     if (error) throw error
     
-    // Process the data to get todo counts
     projects.value = data.map(project => ({
       ...project,
       todo_count: project.todos?.length || 0
@@ -126,6 +133,8 @@ const fetchProjects = async () => {
 }
 
 const createProject = async () => {
+  if (!currentTeam.value?.id) return
+  
   loading.value = true
   try {
     const { data, error } = await supabase
@@ -134,7 +143,8 @@ const createProject = async () => {
         {
           name: newProject.name,
           description: newProject.description,
-          user_id: user.value.id
+          user_id: user.value.id,
+          team_id: currentTeam.value.id
         }
       ])
       .select()
@@ -156,7 +166,16 @@ const formatDate = (dateString) => {
   return new Date(dateString).toLocaleDateString()
 }
 
+// Watch for team changes and refetch projects
+watch(currentTeam, () => {
+  if (currentTeam.value) {
+    fetchProjects()
+  }
+}, { immediate: true })
+
 onMounted(() => {
-  fetchProjects()
+  if (currentTeam.value) {
+    fetchProjects()
+  }
 })
 </script>

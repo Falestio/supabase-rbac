@@ -6,6 +6,55 @@
         <span class="text-white font-bold text-xl">TodoMaster</span>
       </div>
       
+      <!-- Team Selector -->
+      <div v-if="currentTeam" class="px-4 py-3 bg-indigo-800 border-b border-indigo-600">
+        <div class="relative">
+          <button 
+            @click="showTeamDropdown = !showTeamDropdown"
+            class="w-full flex items-center justify-between px-3 py-2 text-sm text-white bg-indigo-700 rounded-md hover:bg-indigo-600"
+          >
+            <div class="flex items-center">
+              <span class="material-icons text-sm mr-2">groups</span>
+              <span class="truncate">{{ currentTeam.name }}</span>
+            </div>
+            <span class="material-icons text-sm">expand_more</span>
+          </button>
+          
+          <!-- Team Dropdown -->
+          <div v-if="showTeamDropdown" class="absolute top-full left-0 right-0 mt-1 bg-white rounded-md shadow-lg z-50">
+            <div class="py-1">
+              <div class="px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wide">
+                Switch Team
+              </div>
+              <button
+                v-for="team in userTeams"
+                :key="team.id"
+                @click="handleTeamSwitch(team)"
+                class="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
+                :class="{ 'bg-indigo-50 text-indigo-700': team.id === currentTeam.id }"
+              >
+                <span class="material-icons text-sm mr-2">
+                  {{ team.id === currentTeam.id ? 'check_circle' : 'group' }}
+                </span>
+                <div class="flex-1">
+                  <div class="font-medium">{{ team.name }}</div>
+                  <div class="text-xs text-gray-500">{{ team.role }}</div>
+                </div>
+              </button>
+              <div class="border-t border-gray-100 mt-1">
+                <button
+                  @click="showCreateTeamModal = true; showTeamDropdown = false"
+                  class="w-full text-left px-3 py-2 text-sm text-indigo-600 hover:bg-gray-100 flex items-center"
+                >
+                  <span class="material-icons text-sm mr-2">add</span>
+                  Create New Team
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- User Info Section -->
       <div v-if="user" class="px-4 py-3 bg-indigo-800 border-b border-indigo-600">
         <div class="flex items-center">
@@ -75,14 +124,67 @@
         <slot />
       </main>
     </div>
+
+    <!-- Create Team Modal -->
+    <div v-if="showCreateTeamModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
+      <div class="bg-white rounded-lg p-6 w-full max-w-md">
+        <h2 class="text-lg font-semibold mb-4">Create New Team</h2>
+        <form @submit.prevent="handleCreateTeam">
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700 mb-2">Team Name</label>
+            <input 
+              v-model="newTeam.name"
+              type="text" 
+              required
+              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+            >
+          </div>
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700 mb-2">Description</label>
+            <textarea 
+              v-model="newTeam.description"
+              rows="3"
+              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+            ></textarea>
+          </div>
+          <div class="flex justify-end space-x-3">
+            <button 
+              type="button"
+              @click="showCreateTeamModal = false"
+              class="px-4 py-2 text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+            <button 
+              type="submit"
+              :disabled="teamLoading"
+              class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50"
+            >
+              {{ teamLoading ? 'Creating...' : 'Create' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Click outside to close dropdown -->
+    <div v-if="showTeamDropdown" @click="showTeamDropdown = false" class="fixed inset-0 z-40"></div>
   </div>
 </template>
 
 <script setup>
 const supabase = useSupabaseClient()
 const user = useSupabaseUser()
+const { currentTeam, userTeams, switchTeam, createTeam, initializeTeam } = useTeam()
 
 const loading = ref(false)
+const showTeamDropdown = ref(false)
+const showCreateTeamModal = ref(false)
+const teamLoading = ref(false)
+const newTeam = reactive({
+  name: '',
+  description: ''
+})
 
 // Computed properties for user display
 const userName = computed(() => {
@@ -102,6 +204,29 @@ const userInitials = computed(() => {
     .slice(0, 2)
 })
 
+const handleTeamSwitch = (team) => {
+  switchTeam(team)
+  showTeamDropdown.value = false
+  // Refresh current page to load team-specific data
+  window.location.reload()
+}
+
+const handleCreateTeam = async () => {
+  if (!newTeam.name.trim()) return
+  
+  teamLoading.value = true
+  try {
+    await createTeam(newTeam.name, newTeam.description)
+    showCreateTeamModal.value = false
+    newTeam.name = ''
+    newTeam.description = ''
+  } catch (error) {
+    console.error('Error creating team:', error)
+  } finally {
+    teamLoading.value = false
+  }
+}
+
 const handleLogout = async () => {
   loading.value = true
   
@@ -119,13 +244,10 @@ const handleLogout = async () => {
   }
 }
 
-// Add material icons link to head
-useHead({
-  link: [
-    {
-      rel: 'stylesheet',
-      href: 'https://fonts.googleapis.com/icon?family=Material+Icons',
-    }
-  ]
+// Initialize teams when component mounts
+onMounted(async () => {
+  if (user.value) {
+    await initializeTeam()
+  }
 })
 </script>

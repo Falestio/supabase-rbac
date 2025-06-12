@@ -100,6 +100,7 @@ definePageMeta({
 const route = useRoute()
 const supabase = useSupabaseClient()
 const user = useSupabaseUser()
+const { currentTeam } = useTeam()
 
 const todos = ref([])
 const project = ref(null)
@@ -110,15 +111,14 @@ const newTodo = reactive({
 })
 
 const projectId = route.params.projectid
-console.log('Project ID:', projectId)
 
 const completedCount = computed(() => {
   return todos.value.filter(todo => todo.completed).length
 })
 
 const fetchProject = async () => {
-  if (!projectId || !user.value?.id) {
-    console.error('Missing project ID or user ID')
+  if (!projectId || !user.value?.id || !currentTeam.value?.id) {
+    console.error('Missing project ID, user ID, or team ID')
     return
   }
 
@@ -127,7 +127,7 @@ const fetchProject = async () => {
       .from('projects')
       .select('*')
       .eq('id', projectId)
-      .eq('user_id', user.value.id)
+      .eq('team_id', currentTeam.value.id)
       .single()
 
     if (error) throw error
@@ -138,8 +138,8 @@ const fetchProject = async () => {
 }
 
 const fetchTodos = async () => {
-  if (!projectId || !user.value?.id) {
-    console.error('Missing project ID or user ID')
+  if (!projectId || !user.value?.id || !currentTeam.value?.id) {
+    console.error('Missing project ID, user ID, or team ID')
     return
   }
 
@@ -148,7 +148,7 @@ const fetchTodos = async () => {
       .from('todos')
       .select('*')
       .eq('project_id', projectId)
-      .eq('user_id', user.value.id)
+      .eq('team_id', currentTeam.value.id)
       .order('created_at', { ascending: false })
 
     if (error) throw error
@@ -159,7 +159,7 @@ const fetchTodos = async () => {
 }
 
 const addTodo = async () => {
-  if (!newTodo.title.trim() || !projectId || !user.value?.id) return
+  if (!newTodo.title.trim() || !projectId || !user.value?.id || !currentTeam.value?.id) return
   
   loading.value = true
   try {
@@ -170,7 +170,8 @@ const addTodo = async () => {
           title: newTodo.title,
           description: newTodo.description,
           project_id: projectId,
-          user_id: user.value.id
+          user_id: user.value.id,
+          team_id: currentTeam.value.id
         }
       ])
       .select()
@@ -220,9 +221,9 @@ const deleteTodo = async (todoId) => {
   }
 }
 
-// Wait for user to be available before fetching data
+// Watch for team and user changes
 watchEffect(async () => {
-  if (user.value && projectId) {
+  if (user.value && projectId && currentTeam.value) {
     await fetchProject()
     await fetchTodos()
   }
